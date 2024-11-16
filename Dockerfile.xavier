@@ -1,0 +1,107 @@
+ARG BASE_IMAGE=nvcr.io/nvidia/l4t-jetpack:r35.4.1
+ARG GOLANG_VERSION=1.22.8
+ARG CMAKE_VERSION=3.22.1
+ARG CUDA_ARCHITECTURES="72"  # Xavier NX/AGX Xavier architecture
+
+### Builder stage
+FROM ${BASE_IMAGE} AS builder
+
+ARG GOLANG_VERSION
+ARG CMAKE_VERSION
+ARG CUDA_ARCHITECTURES
+
+# Install basic dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    build-essential \
+    ccache \
+    pigz \
+    pkg-config \
+    libssl-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Go
+RUN curl -s -L https://dl.google.com/go/go${GOLANG_VERSION}.linux-arm64.tar.gz | tar xz -C /usr/local && \
+    ln -s /usr/local/go/bin/go /usr/local/bin/go && \
+    ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt
+
+# Install CMake
+RUN curl -L -O https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}.tar.gz && \
+    tar xf cmake-${CMAKE_VERSION}.tar.gz && \
+    cd cmake-${CMAKE_VERSION} && \
+    ./bootstrap -- -DCMAKE_BUILD_TYPE:STRING=Release && \
+    make -j$(nproc) && \
+    make install && \
+    cd .. && \
+    rm -rf cmake-${CMAKE_VERSION}*
+
+# Set up environment
+ENV PATH=/usr/local/cuda/bin:$PATH
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/cuda/lib64/stubs:$LD_LIBRARY_PATH
+ENV LIBRARY_PATH=/usr/local/cuda/lib64/stubs:$LIBRARY_PATH
+ENV GOARCH=arm64
+ENV CGO_ENABLED=1
+ENV OLLAMA_SKIP_CPU_GENERATE=1
+ENV CUDA_HOME=/usr/local/cuda
+
+# Set up working directory
+WORKDIR /go/src/github.com/ollama/ollama/
+
+# Copy source code
+COPY . .
+
+# Patch GGML to use older NEON intrinsics
+RUN sed -i 's/#include <arm_neon.h>/#include <arm_neon.h>\n#include <arm_fp16.h>/' llama/ggml-cuda.cu llama/ggml.c llama/ggml-impl.h && \
+    sed -i 's/vld1q_s16_x2/vld1q_s16/g' llama/ggml-impl.h && \
+    sed -i 's/vld1q_u8_x2/vld1q_u8/g' llama/ggml-impl.h && \
+    sed -i 's/vld1q_s8_x2/vld1q_s8/g' llama/ggml-impl.h && \
+    sed -i 's/vld1q_s8_x4/vld1q_s8/g' llama/ggml-impl.h && \
+    sed -i 's/vld1q_u8_x4/vld1q_u8/g' llama/ggml-impl.h
+
+# Create CUDA flags file
+RUN echo '-D__ARM_NEON -DGGML_USE_TINYBLAS -DGGML_CUDA_DMMV_X=32 -DGGML_CUDA_MMV_Y=1 -DGGML_USE_CUDA=1' > cuda_flags.txt
+
+# Build Ollama with modified flags
+RUN --mount=type=cache,target=/root/.ccache \
+    CFLAGS="-D__ARM_NEON -DGGML_USE_TINYBLAS" \
+    CXXFLAGS="-D__ARM_NEON -DGGML_USE_TINYBLAS" \
+    NVCCFLAGS="$(cat cuda_flags.txt)" \
+    CUDA_DOCKER_ARCH="72" \
+    make -j$(nproc) \
+    CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES}" \
+    CGO_EXTRA_LDFLAGS_LINUX="-L/usr/local/cuda/lib64/stubs" \
+    DIST_LIB_DIR=/go/src/github.com/ollama/ollama/dist/linux-arm64/lib/ollama \
+    DIST_GPU_RUNNER_DEPS_DIR=/go/src/github.com/ollama/ollama/dist/linux-arm64/lib/ollama/cuda
+
+# Build the main binary
+RUN --mount=type=cache,target=/root/.ccache \
+    go build -trimpath -o dist/linux-arm64/bin/ollama .
+
+### Runtime stage
+FROM ${BASE_IMAGE}
+
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y \
+    ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy binary and libraries from builder
+COPY --from=builder /go/src/github.com/ollama/ollama/dist/linux-arm64/bin/ /bin/
+COPY --from=builder /go/src/github.com/ollama/ollama/dist/linux-arm64/lib/ /lib/
+
+# Set up environment variables
+ENV OLLAMA_HOST=0.0.0.0
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+ENV NVIDIA_VISIBLE_DEVICES=all
+
+# Expose Ollama port
+EXPOSE 11434
+
+ENTRYPOINT ["/bin/ollama"]
+CMD ["serve"]
