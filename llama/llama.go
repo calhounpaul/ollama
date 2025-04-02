@@ -1,117 +1,63 @@
 package llama
 
-//go:generate make -j 8
-
 /*
-#cgo CFLAGS: -O2 -std=c11 -DGGML_BUILD=1 -DNDEBUG -DLOG_DISABLE_LOGS -DGGML_USE_LLAMAFILE
-#cgo CXXFLAGS: -O2 -std=c++11 -DGGML_BUILD=1 -DNDEBUG -DLOG_DISABLE_LOGS -DGGML_USE_LLAMAFILE
-#cgo amd64,avx CFLAGS: -mavx
-#cgo amd64,avx CXXFLAGS: -mavx
-#cgo amd64,avx2 CFLAGS: -mavx2 -mfma
-#cgo amd64,avx2 CXXFLAGS: -mavx2 -mfma
-#cgo amd64,f16c CFLAGS: -mf16c
-#cgo amd64,f16c CXXFLAGS: -mf16c
-#cgo amd64,fma CFLAGS: -mfma
-#cgo amd64,fma CXXFLAGS: -mfma
-#cgo avx CFLAGS: -mavx
-#cgo avx CXXFLAGS: -mavx
-#cgo avx2 CFLAGS: -mavx2 -mfma -mf16c
-#cgo avx2 CXXFLAGS: -mavx2 -mfma -mf16c
-#cgo cuda CFLAGS: -fPIE -DGGML_USE_CUDA -DGGML_CUDA_DMMV_X=32 -DGGML_CUDA_PEER_MAX_BATCH_SIZE=128 -DGGML_CUDA_MMV_Y=1 -DGGML_BUILD=1
-#cgo cuda CFLAGS: -fPIE -DGGML_USE_CUDA -DGGML_CUDA_DMMV_X=32 -DGGML_CUDA_PEER_MAX_BATCH_SIZE=128 -DGGML_CUDA_MMV_Y=1 -DGGML_BUILD=1
-#cgo cuda CXXFLAGS: -DGGML_USE_CUDA -DGGML_CUDA_DMMV_X=32 -DGGML_CUDA_PEER_MAX_BATCH_SIZE=128 -DGGML_CUDA_MMV_Y=1 -DGGML_BUILD=1
-#cgo cuda CXXFLAGS: -DGGML_USE_CUDA -DGGML_CUDA_DMMV_X=32 -DGGML_CUDA_PEER_MAX_BATCH_SIZE=128 -DGGML_CUDA_MMV_Y=1 -DGGML_BUILD=1
-#cgo cuda_jetpack5 LDFLAGS: -lggml_cuda_jetpack5 -L/usr/local/cuda-11/lib64
-#cgo cuda_jetpack6 LDFLAGS: -lggml_cuda_jetpack6 -L/usr/local/cuda-12/lib64
-#cgo cuda_v11 LDFLAGS: -lggml_cuda_v11 -L/usr/local/cuda-11/lib64
-#cgo cuda_v12 LDFLAGS: -lggml_cuda_v12 -L/usr/local/cuda-12/lib64
-#cgo darwin,amd64 CFLAGS: -Wno-incompatible-pointer-types-discards-qualifiers
-#cgo darwin,amd64 CXXFLAGS: -Wno-incompatible-pointer-types-discards-qualifiers
-#cgo darwin,amd64 LDFLAGS: -framework Foundation
-#cgo darwin,amd64,avx2 CFLAGS: -DGGML_USE_ACCELERATE -DACCELERATE_NEW_LAPACK -DACCELERATE_LAPACK_ILP64
-#cgo darwin,amd64,avx2 CXXFLAGS: -DGGML_USE_ACCELERATE -DACCELERATE_NEW_LAPACK -DACCELERATE_LAPACK_ILP64
-#cgo darwin,amd64,avx2 LDFLAGS: -framework Accelerate
-#cgo darwin,arm64 CFLAGS: -DGGML_USE_METAL -DGGML_USE_ACCELERATE -DGGML_METAL_EMBED_LIBRARY -DACCELERATE_NEW_LAPACK -DACCELERATE_LAPACK_ILP64 -DGGML_USE_BLAS
-#cgo darwin,arm64 CXXFLAGS: -DGGML_USE_METAL -DGGML_USE_ACCELERATE -DGGML_METAL_EMBED_LIBRARY -DACCELERATE_NEW_LAPACK -DACCELERATE_LAPACK_ILP64 -DGGML_USE_BLAS
-#cgo darwin,arm64 LDFLAGS: -framework Foundation -framework Metal -framework MetalKit -framework Accelerate
-#cgo linux CFLAGS: -D_GNU_SOURCE
-#cgo linux CXXFLAGS: -D_GNU_SOURCE
-#cgo linux,amd64 LDFLAGS: -L${SRCDIR}/build/Linux/amd64
-#cgo linux,amd64 LDFLAGS: -L${SRCDIR}/build/Linux/amd64
-#cgo linux,arm64 CFLAGS: -D__aarch64__ -D__ARM_NEON -D__ARM_FEATURE_FMA
-#cgo linux,arm64 CXXFLAGS: -D__aarch64__ -D__ARM_NEON -D__ARM_FEATURE_FMA
-#cgo linux,arm64 LDFLAGS: -L${SRCDIR}/build/Linux/arm64
-#cgo linux,arm64,sve CFLAGS: -march=armv8.6-a+sve
-#cgo linux,arm64,sve CXXFLAGS: -march=armv8.6-a+sve
-#cgo linux,cuda LDFLAGS: -lcuda -lcudart -lcublas -lcublasLt -lpthread -ldl -lrt -lresolv
-#cgo linux,rocm LDFLAGS: -L/opt/rocm/lib -lpthread -ldl -lrt -lresolv
-#cgo rocm CFLAGS: -DGGML_USE_CUDA -DGGML_USE_HIPBLAS -DGGML_CUDA_DMMV_X=32 -DGGML_CUDA_PEER_MAX_BATCH_SIZE=128 -DGGML_CUDA_MMV_Y=1 -DGGML_BUILD=1
-#cgo rocm CXXFLAGS: -DGGML_USE_CUDA -DGGML_USE_HIPBLAS -DGGML_CUDA_DMMV_X=32 -DGGML_CUDA_PEER_MAX_BATCH_SIZE=128 -DGGML_CUDA_MMV_Y=1 -DGGML_BUILD=1
-#cgo rocm LDFLAGS: -L${SRCDIR} -lggml_rocm -lhipblas -lamdhip64 -lrocblas
-#cgo windows CFLAGS: -Wno-discarded-qualifiers -D_WIN32_WINNT=0x602
-#cgo windows CXXFLAGS: -D_WIN32_WINNT=0x602
-#cgo windows LDFLAGS: -lmsvcrt
-#cgo windows LDFLAGS: -lmsvcrt -static-libstdc++ -static-libgcc -static
-#cgo windows,amd64 LDFLAGS: -L${SRCDIR}/build/Windows/amd64
-#cgo windows,amd64 LDFLAGS: -L${SRCDIR}/build/Windows/amd64
-#cgo windows,arm64 CFLAGS: -D__aarch64__ -D__ARM_NEON -D__ARM_FEATURE_FMA
-#cgo windows,arm64 CXXFLAGS: -D__aarch64__ -D__ARM_NEON -D__ARM_FEATURE_FMA
-#cgo windows,arm64 LDFLAGS: -L${SRCDIR}/build/Windows/arm64
-#cgo windows,arm64 LDFLAGS: -L${SRCDIR}/build/Windows/arm64
-#cgo windows,cuda LDFLAGS: -lcuda -lcudart -lcublas -lcublasLt
-#cgo windows,rocm LDFLAGS: -lggml_rocm -lhipblas -lamdhip64 -lrocblas
+#cgo CFLAGS: -std=c11
+#cgo CXXFLAGS: -std=c++17
+#cgo CPPFLAGS: -I${SRCDIR}/llama.cpp/include
+#cgo CPPFLAGS: -I${SRCDIR}/llama.cpp/common
+#cgo CPPFLAGS: -I${SRCDIR}/llama.cpp/examples/llava
+#cgo CPPFLAGS: -I${SRCDIR}/llama.cpp/src
+#cgo CPPFLAGS: -I${SRCDIR}/../ml/backend/ggml/ggml/include
 
 #include <stdlib.h>
+#include "ggml.h"
 #include "llama.h"
 #include "clip.h"
-#include "ggml.h"
 #include "llava.h"
+#include "gguf.h"
+
 #include "mllama.h"
 #include "sampling_ext.h"
 
-bool llamaProgressCallback(float progress, void *user_data);
-
-typedef enum {COMP_UNKNOWN,COMP_GCC,COMP_CLANG} COMPILER;
-COMPILER inline get_compiler() {
-#if defined(__clang__)
-	return COMP_CLANG;
-#elif defined(__GNUC__)
-	return COMP_GCC;
-#else
-	return UNKNOWN_COMPILER;
-#endif
-}
+extern bool llamaProgressCallback(float progress, void *user_data);
+extern void llamaLog(int level, char* text, void* user_data);
 */
 import "C"
 
 import (
+	"context"
 	_ "embed"
 	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 	"runtime"
 	"runtime/cgo"
 	"slices"
 	"strings"
 	"unsafe"
+
+	_ "github.com/ollama/ollama/llama/llama.cpp/common"
+	_ "github.com/ollama/ollama/llama/llama.cpp/examples/llava"
+	_ "github.com/ollama/ollama/llama/llama.cpp/src"
+	ggml "github.com/ollama/ollama/ml/backend/ggml/ggml/src"
 )
 
-var CpuFeatures = ""
-
-func BackendInit() {
-	C.llama_backend_init()
+func init() {
+	C.llama_log_set(C.ggml_log_callback(C.llamaLog), nil)
 }
 
-func PrintSystemInfo() string {
-	var compiler string
-	switch C.get_compiler() {
-	case C.COMP_UNKNOWN:
-		compiler = "cgo(unknown_compiler)"
-	case C.COMP_GCC:
-		compiler = "cgo(gcc)"
-	case C.COMP_CLANG:
-		compiler = "cgo(clang)"
+//export llamaLog
+func llamaLog(level C.int, text *C.char, _ unsafe.Pointer) {
+	// slog levels zeros INFO and are multiples of 4
+	if slog.Default().Enabled(context.TODO(), slog.Level(int(level-C.GGML_LOG_LEVEL_INFO)*4)) {
+		fmt.Fprint(os.Stderr, C.GoString(text))
 	}
-	return C.GoString(C.llama_print_system_info()) + compiler
+}
+
+func BackendInit() {
+	ggml.OnceLoad()
+	C.llama_backend_init()
 }
 
 func GetModelArch(modelPath string) (string, error) {
@@ -140,7 +86,7 @@ type ContextParams struct {
 	c C.struct_llama_context_params
 }
 
-func NewContextParams(numCtx int, batchSize int, numSeqMax int, threads int, flashAttention bool) ContextParams {
+func NewContextParams(numCtx int, batchSize int, numSeqMax int, threads int, flashAttention bool, kvCacheType string) ContextParams {
 	params := C.llama_context_default_params()
 	params.n_ctx = C.uint(numCtx)
 	params.n_batch = C.uint(batchSize)
@@ -149,7 +95,26 @@ func NewContextParams(numCtx int, batchSize int, numSeqMax int, threads int, fla
 	params.n_threads_batch = params.n_threads
 	params.embeddings = C.bool(true)
 	params.flash_attn = C.bool(flashAttention)
+	params.type_k = kvCacheTypeFromStr(strings.ToLower(kvCacheType))
+	params.type_v = kvCacheTypeFromStr(strings.ToLower(kvCacheType))
+
 	return ContextParams{c: params}
+}
+
+// kvCacheTypeFromStr converts a string cache type to the corresponding GGML type value
+func kvCacheTypeFromStr(s string) C.enum_ggml_type {
+	if s == "" {
+		return C.GGML_TYPE_F16
+	}
+
+	switch s {
+	case "q8_0":
+		return C.GGML_TYPE_Q8_0
+	case "q4_0":
+		return C.GGML_TYPE_Q4_0
+	default:
+		return C.GGML_TYPE_F16
+	}
 }
 
 type Context struct {
@@ -157,9 +122,7 @@ type Context struct {
 	numThreads int
 }
 
-func (c *Context) KvCacheClear() {
-	C.llama_kv_cache_clear(c.c)
-}
+var ErrKvCacheFull = errors.New("could not find a kv cache slot")
 
 func (c *Context) Decode(batch *Batch) error {
 	// Positive return values does not mean a fatal error, but rather a warning.
@@ -173,7 +136,7 @@ func (c *Context) Decode(batch *Batch) error {
 	}
 
 	if code > 0 {
-		return fmt.Errorf("could not find a KV slot for the batch - try reducing the size of the batch or increase the context. code: %d", code)
+		return ErrKvCacheFull
 	}
 
 	return nil
@@ -195,23 +158,39 @@ func (c *Context) KvCacheSeqCp(srcSeqId int, dstSeqId int, p0 int, p1 int) {
 	C.llama_kv_cache_seq_cp(c.c, C.int(srcSeqId), C.int(dstSeqId), C.int(p0), C.int(p1))
 }
 
+func (c *Context) KvCacheClear() {
+	C.llama_kv_cache_clear(c.c)
+}
+
+func (c *Context) KvCacheDefrag() {
+	C.llama_kv_cache_defrag(c.c)
+}
+
+func (c *Context) KvCacheCanShift() bool {
+	return bool(C.llama_kv_cache_can_shift(c.c))
+}
+
 // Get the embeddings for a sequence id
 func (c *Context) GetEmbeddingsSeq(seqId int) []float32 {
-	embeddings := unsafe.Pointer(C.llama_get_embeddings_seq(c.c, C.int(seqId)))
-	if embeddings == nil {
+	e := unsafe.Pointer(C.llama_get_embeddings_seq(c.c, C.int(seqId)))
+	if e == nil {
 		return nil
 	}
 
-	return unsafe.Slice((*float32)(embeddings), c.Model().NEmbd())
+	embeddings := make([]float32, c.Model().NEmbd())
+	_ = copy(embeddings, unsafe.Slice((*float32)(e), c.Model().NEmbd()))
+	return embeddings
 }
 
 func (c *Context) GetEmbeddingsIth(i int) []float32 {
-	embeddings := unsafe.Pointer(C.llama_get_embeddings_ith(c.c, C.int32_t(i)))
-	if embeddings == nil {
+	e := unsafe.Pointer(C.llama_get_embeddings_ith(c.c, C.int32_t(i)))
+	if e == nil {
 		return nil
 	}
 
-	return unsafe.Slice((*float32)(embeddings), c.Model().NEmbd())
+	embeddings := make([]float32, c.Model().NEmbd())
+	_ = copy(embeddings, unsafe.Slice((*float32)(e), c.Model().NEmbd()))
+	return embeddings
 }
 
 type ModelParams struct {
@@ -262,7 +241,7 @@ func LoadModelFromFile(modelPath string, params ModelParams) (*Model, error) {
 		cparams.progress_callback_user_data = unsafe.Pointer(&handle)
 	}
 
-	m := Model{c: C.llama_load_model_from_file(C.CString(modelPath), cparams)}
+	m := Model{c: C.llama_model_load_from_file(C.CString(modelPath), cparams)}
 	if m.c == nil {
 		return nil, fmt.Errorf("unable to load model: %s", modelPath)
 	}
@@ -270,13 +249,27 @@ func LoadModelFromFile(modelPath string, params ModelParams) (*Model, error) {
 	return &m, nil
 }
 
+func LoadVocabFromFile(path string) (*Vocab, error) {
+	mp := C.CString(path)
+	defer C.free(unsafe.Pointer(mp))
+	v := Vocab{c: C.llama_load_vocab_from_file(mp)}
+	if v.c == nil {
+		return nil, fmt.Errorf("unable to load vocab: %s", path)
+	}
+	return &v, nil
+}
+
+func FreeVocab(vocab *Vocab) {
+	C.llama_free_vocab(vocab.c)
+}
+
 func FreeModel(model *Model) {
-	C.llama_free_model(model.c)
+	C.llama_model_free(model.c)
 }
 
 func NewContextWithModel(model *Model, params ContextParams) (*Context, error) {
 	c := Context{
-		c:          C.llama_new_context_with_model(model.c, params.c),
+		c:          C.llama_init_from_model(model.c, params.c),
 		numThreads: int(params.c.n_threads),
 	}
 	if c.c == nil {
@@ -287,35 +280,43 @@ func NewContextWithModel(model *Model, params ContextParams) (*Context, error) {
 }
 
 func (m *Model) NumVocab() int {
-	return int(C.llama_n_vocab(m.c))
+	return int(C.llama_vocab_n_tokens(m.Vocab()))
 }
 
 func (m *Model) TokenIsEog(token int) bool {
-	return bool(C.llama_token_is_eog(m.c, C.llama_token(token)))
+	return bool(C.llama_vocab_is_eog(m.Vocab(), C.llama_token(token)))
 }
 
 func (m *Model) AddBOSToken() bool {
-	return bool(C.llama_add_bos_token(m.c))
+	return bool(C.llama_vocab_get_add_bos(m.Vocab()))
 }
 
 func (m *Model) ApplyLoraFromFile(context *Context, loraPath string, scale float32, threads int) error {
 	cLoraPath := C.CString(loraPath)
 	defer C.free(unsafe.Pointer(cLoraPath))
 
-	loraAdapter := C.llama_lora_adapter_init(m.c, cLoraPath)
+	loraAdapter := C.llama_adapter_lora_init(m.c, cLoraPath)
 	if loraAdapter == nil {
 		return errors.New("unable to load lora")
 	}
 
 	err := -1
 	if loraAdapter != nil {
-		err = int(C.llama_lora_adapter_set(context.c, loraAdapter, C.float(scale)))
+		err = int(C.llama_set_adapter_lora(context.c, loraAdapter, C.float(scale)))
 	}
 	if err != 0 {
 		return errors.New("error applying lora from file")
 	}
 
 	return nil
+}
+
+type Vocab struct {
+	c *C.struct_llama_vocab
+}
+
+func (m *Model) Vocab() *C.struct_llama_vocab {
+	return C.llama_model_get_vocab(m.c)
 }
 
 type Batch struct {
@@ -384,6 +385,8 @@ func (b *Batch) Add(token int, embed []float32, pos int, logits bool, seqIds ...
 
 	if logits {
 		unsafe.Slice(b.c.logits, b.allocSize())[b.c.n_tokens] = 1
+	} else {
+		unsafe.Slice(b.c.logits, b.allocSize())[b.c.n_tokens] = 0
 	}
 
 	b.c.n_tokens += 1
@@ -406,7 +409,7 @@ func (m *Model) TokenToPiece(token int) string {
 	tokenLen := 12
 	buf := make([]byte, tokenLen)
 	tokenLen = int(C.llama_token_to_piece(
-		m.c,
+		m.Vocab(),
 		C.int32_t(token),
 		(*C.char)(unsafe.Pointer(&buf[0])),
 		C.int32_t(tokenLen),
@@ -418,7 +421,7 @@ func (m *Model) TokenToPiece(token int) string {
 
 		buf = make([]byte, tokenLen)
 		C.llama_token_to_piece(
-			m.c,
+			m.Vocab(),
 			C.int32_t(token),
 			(*C.char)(unsafe.Pointer(&buf[0])),
 			C.int32_t(tokenLen),
@@ -436,7 +439,7 @@ func (m *Model) Tokenize(text string, addSpecial bool, parseSpecial bool) ([]int
 	defer C.free(unsafe.Pointer(cText))
 
 	result := C.llama_tokenize(
-		m.c,
+		m.Vocab(),
 		cText,
 		C.int32_t(len(text)),
 		&cTokens[0],
@@ -450,7 +453,7 @@ func (m *Model) Tokenize(text string, addSpecial bool, parseSpecial bool) ([]int
 		maxTokens = int(-result)
 		cTokens = make([]C.llama_token, maxTokens)
 		result = C.llama_tokenize(
-			m.c,
+			m.Vocab(),
 			cText,
 			C.int32_t(len(text)),
 			&cTokens[0],
@@ -472,7 +475,7 @@ func (m *Model) Tokenize(text string, addSpecial bool, parseSpecial bool) ([]int
 }
 
 func (m *Model) NEmbd() int {
-	return int(C.llama_n_embd(m.c))
+	return int(C.llama_model_n_embd(m.c))
 }
 
 func Quantize(infile, outfile string, ftype uint32) error {
@@ -607,14 +610,13 @@ func (c *Context) Synchronize() {
 // sampling
 // TODO: this is a temporary wrapper to allow calling C++ code from CGo
 type SamplingContext struct {
-	c *C.struct_gpt_sampler
+	c *C.struct_common_sampler
 }
 
 type SamplingParams struct {
 	TopK           int
 	TopP           float32
 	MinP           float32
-	TfsZ           float32
 	TypicalP       float32
 	Temp           float32
 	RepeatLastN    int
@@ -630,11 +632,10 @@ type SamplingParams struct {
 }
 
 func NewSamplingContext(model *Model, params SamplingParams) (*SamplingContext, error) {
-	var cparams C.struct_gpt_sampler_cparams
+	var cparams C.struct_common_sampler_cparams
 	cparams.top_k = C.int32_t(params.TopK)
 	cparams.top_p = C.float(params.TopP)
 	cparams.min_p = C.float(params.MinP)
-	cparams.tfs_z = C.float(params.TfsZ)
 	cparams.typical_p = C.float(params.TypicalP)
 	cparams.temp = C.float(params.Temp)
 	cparams.penalty_last_n = C.int32_t(params.RepeatLastN)
@@ -644,31 +645,99 @@ func NewSamplingContext(model *Model, params SamplingParams) (*SamplingContext, 
 	cparams.mirostat = C.int32_t(params.Mirostat)
 	cparams.mirostat_tau = C.float(params.MirostatTau)
 	cparams.mirostat_eta = C.float(params.MirostatEta)
-	cparams.penalize_nl = C.bool(params.PenalizeNl)
 	cparams.seed = C.uint32_t(params.Seed)
 
 	grammar := C.CString(params.Grammar)
 	defer C.free(unsafe.Pointer(grammar))
 
 	cparams.grammar = grammar
-	context := &SamplingContext{c: C.gpt_sampler_cinit(model.c, &cparams)}
+	context := &SamplingContext{c: C.common_sampler_cinit(model.c, &cparams)}
 	if context.c == nil {
 		return nil, errors.New("unable to create sampling context")
 	}
 
-	runtime.SetFinalizer(context, func(s *SamplingContext) { C.gpt_sampler_cfree(s.c) })
+	runtime.SetFinalizer(context, func(s *SamplingContext) { C.common_sampler_cfree(s.c) })
 
 	return context, nil
 }
 
 func (s *SamplingContext) Reset() {
-	C.gpt_sampler_creset(s.c)
+	C.common_sampler_creset(s.c)
 }
 
 func (s *SamplingContext) Sample(llamaContext *Context, idx int) int {
-	return int(C.gpt_sampler_csample(s.c, llamaContext.c, C.int(idx)))
+	return int(C.common_sampler_csample(s.c, llamaContext.c, C.int(idx)))
 }
 
 func (s *SamplingContext) Accept(id int, applyGrammar bool) {
-	C.gpt_sampler_caccept(s.c, C.llama_token(id), C.bool(applyGrammar))
+	C.common_sampler_caccept(s.c, C.llama_token(id), C.bool(applyGrammar))
+}
+
+// SchemaToGrammar converts the provided JSON schema to a grammar. It returns
+// nil if the provided schema is invalid JSON or an invalid JSON schema.
+func SchemaToGrammar(schema []byte) []byte {
+	cStr := C.CString(string(schema))
+	defer C.free(unsafe.Pointer(cStr))
+
+	// Allocate buffer for grammar output with reasonable size
+	const maxLen = 32768 // 32KB
+	buf := make([]byte, maxLen)
+
+	// Call C function to convert schema to grammar
+	n := C.schema_to_grammar(cStr, (*C.char)(unsafe.Pointer(&buf[0])), C.size_t(maxLen))
+	if n == 0 {
+		// preserve nil
+		return nil
+	}
+	return buf[:n]
+}
+
+type Sampler struct {
+	c *C.struct_llama_sampler
+}
+
+func NewGrammarSampler(vocab *Vocab, grammar string) *Sampler {
+	cGrammar := C.CString(grammar)
+	cRoot := C.CString("root")
+	defer C.free(unsafe.Pointer(cGrammar))
+	defer C.free(unsafe.Pointer(cRoot))
+
+	sampler := &Sampler{c: C.llama_sampler_init_grammar(vocab.c, cGrammar, cRoot)}
+
+	return sampler
+}
+
+func (s *Sampler) Accept(token int32) {
+	C.llama_sampler_accept(s.c, C.llama_token(token))
+}
+
+type TokenData struct {
+	Id    int32
+	Logit float32
+}
+
+func (s *Sampler) Apply(tokens []TokenData) {
+	tds := make([]C.struct_llama_token_data, len(tokens))
+	for i, token := range tokens {
+		tds[i] = C.struct_llama_token_data{
+			id:    C.int32_t(token.Id),
+			logit: C.float(token.Logit),
+			p:     C.float(0.0),
+		}
+	}
+	tda := &C.llama_token_data_array{
+		data:     (*C.struct_llama_token_data)(unsafe.Pointer(&tds[0])),
+		size:     C.size_t(len(tokens)),
+		selected: C.int64_t(-1),
+		sorted:   C.bool(false),
+	}
+
+	var pinner runtime.Pinner
+	pinner.Pin(&tds[0])
+	defer pinner.Unpin()
+
+	C.llama_sampler_apply(s.c, tda)
+	for i := range tokens {
+		tokens[i].Logit = float32(tds[i].logit)
+	}
 }

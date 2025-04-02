@@ -13,13 +13,12 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/exp/maps"
 
 	"github.com/ollama/ollama/api"
 	"github.com/ollama/ollama/envconfig"
-	"github.com/ollama/ollama/parser"
 	"github.com/ollama/ollama/readline"
 	"github.com/ollama/ollama/types/errtypes"
+	"github.com/ollama/ollama/types/model"
 )
 
 type MultilineState int
@@ -197,6 +196,10 @@ func generateInteractive(cmd *cobra.Command, opts runOptions) error {
 			opts.Messages = []api.Message{}
 			fmt.Printf("Loading model '%s'\n", opts.Model)
 			if err := loadOrUnloadModel(cmd, &opts); err != nil {
+				if strings.Contains(err.Error(), "not found") {
+					fmt.Printf("error: %v\n", err)
+					continue
+				}
 				return err
 			}
 			continue
@@ -213,10 +216,7 @@ func generateInteractive(cmd *cobra.Command, opts runOptions) error {
 				return err
 			}
 
-			req := &api.CreateRequest{
-				Name:      args[1],
-				Modelfile: buildModelfile(opts),
-			}
+			req := NewCreateRequest(args[1], opts)
 			fn := func(resp api.ProgressResponse) error { return nil }
 			err = client.Create(cmd.Context(), req, fn)
 			if err != nil {
@@ -320,8 +320,6 @@ func generateInteractive(cmd *cobra.Command, opts runOptions) error {
 					}
 					fmt.Println("Set system message.")
 					sb.Reset()
-
-					sb.Reset()
 					continue
 				default:
 					fmt.Printf("Unknown command '/set %s'. Type /? for help\n", args[1])
@@ -350,7 +348,7 @@ func generateInteractive(cmd *cobra.Command, opts runOptions) error {
 
 				switch args[1] {
 				case "info":
-					_ = showInfo(resp, os.Stderr)
+					_ = showInfo(resp, false, os.Stderr)
 				case "license":
 					if resp.License == "" {
 						fmt.Println("No license was specified for this model.")
@@ -461,36 +459,32 @@ func generateInteractive(cmd *cobra.Command, opts runOptions) error {
 	}
 }
 
-func buildModelfile(opts runOptions) string {
-	var f parser.File
-	f.Commands = append(f.Commands, parser.Command{Name: "model", Args: cmp.Or(opts.ParentModel, opts.Model)})
+func NewCreateRequest(name string, opts runOptions) *api.CreateRequest {
+	parentModel := opts.ParentModel
+
+	modelName := model.ParseName(parentModel)
+	if !modelName.IsValid() {
+		parentModel = ""
+	}
+
+	req := &api.CreateRequest{
+		Model: name,
+		From:  cmp.Or(parentModel, opts.Model),
+	}
 
 	if opts.System != "" {
-		f.Commands = append(f.Commands, parser.Command{Name: "system", Args: opts.System})
+		req.System = opts.System
 	}
 
-	keys := maps.Keys(opts.Options)
-	slices.Sort(keys)
-	for _, k := range keys {
-		v := opts.Options[k]
-		var cmds []parser.Command
-		switch t := v.(type) {
-		case []string:
-			for _, s := range t {
-				cmds = append(cmds, parser.Command{Name: k, Args: s})
-			}
-		default:
-			cmds = append(cmds, parser.Command{Name: k, Args: fmt.Sprintf("%v", t)})
-		}
-
-		f.Commands = append(f.Commands, cmds...)
+	if len(opts.Options) > 0 {
+		req.Parameters = opts.Options
 	}
 
-	for _, msg := range opts.Messages {
-		f.Commands = append(f.Commands, parser.Command{Name: "message", Args: fmt.Sprintf("%s: %s", msg.Role, msg.Content)})
+	if len(opts.Messages) > 0 {
+		req.Messages = opts.Messages
 	}
 
-	return f.String()
+	return req
 }
 
 func normalizeFilePath(fp string) string {
@@ -516,7 +510,7 @@ func extractFileNames(input string) []string {
 	// Regex to match file paths starting with optional drive letter, / ./ \ or .\ and include escaped or unescaped spaces (\ or %20)
 	// and followed by more characters and a file extension
 	// This will capture non filename strings, but we'll check for file existence to remove mismatches
-	regexPattern := `(?:[a-zA-Z]:)?(?:\./|/|\\)[\S\\ ]+?\.(?i:jpg|jpeg|png|svg)\b`
+	regexPattern := `(?:[a-zA-Z]:)?(?:\./|/|\\)[\S\\ ]+?\.(?i:jpg|jpeg|png)\b`
 	re := regexp.MustCompile(regexPattern)
 
 	return re.FindAllString(input, -1)

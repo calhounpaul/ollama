@@ -10,6 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ollama/ollama/envconfig"
+	"github.com/ollama/ollama/types/model"
 )
 
 // StatusError is an error with an HTTP status code and message.
@@ -67,7 +70,7 @@ type GenerateRequest struct {
 	Raw bool `json:"raw,omitempty"`
 
 	// Format specifies the format to return a response in.
-	Format string `json:"format"`
+	Format json.RawMessage `json:"format,omitempty"`
 
 	// KeepAlive controls how long the model will stay loaded in memory following
 	// this request.
@@ -94,7 +97,7 @@ type ChatRequest struct {
 	Stream *bool `json:"stream,omitempty"`
 
 	// Format is the format to return the response in (e.g. "json").
-	Format string `json:"format"`
+	Format json.RawMessage `json:"format,omitempty"`
 
 	// KeepAlive controls how long the model will stay loaded into memory
 	// following the request.
@@ -146,6 +149,7 @@ type ToolCall struct {
 }
 
 type ToolCallFunction struct {
+	Index     int                       `json:"index,omitempty"`
 	Name      string                    `json:"name"`
 	Arguments ToolCallFunctionArguments `json:"arguments"`
 }
@@ -215,7 +219,6 @@ type Options struct {
 	TopK             int      `json:"top_k,omitempty"`
 	TopP             float32  `json:"top_p,omitempty"`
 	MinP             float32  `json:"min_p,omitempty"`
-	TFSZ             float32  `json:"tfs_z,omitempty"`
 	TypicalP         float32  `json:"typical_p,omitempty"`
 	RepeatLastN      int      `json:"repeat_last_n,omitempty"`
 	Temperature      float32  `json:"temperature,omitempty"`
@@ -225,7 +228,6 @@ type Options struct {
 	Mirostat         int      `json:"mirostat,omitempty"`
 	MirostatTau      float32  `json:"mirostat_tau,omitempty"`
 	MirostatEta      float32  `json:"mirostat_eta,omitempty"`
-	PenalizeNewline  bool     `json:"penalize_newline,omitempty"`
 	Stop             []string `json:"stop,omitempty"`
 }
 
@@ -295,17 +297,21 @@ type EmbeddingResponse struct {
 
 // CreateRequest is the request passed to [Client.Create].
 type CreateRequest struct {
-	Model     string `json:"model"`
-	Modelfile string `json:"modelfile"`
-	Stream    *bool  `json:"stream,omitempty"`
-	Quantize  string `json:"quantize,omitempty"`
+	Model    string `json:"model"`
+	Stream   *bool  `json:"stream,omitempty"`
+	Quantize string `json:"quantize,omitempty"`
+
+	From       string            `json:"from,omitempty"`
+	Files      map[string]string `json:"files,omitempty"`
+	Adapters   map[string]string `json:"adapters,omitempty"`
+	Template   string            `json:"template,omitempty"`
+	License    any               `json:"license,omitempty"`
+	System     string            `json:"system,omitempty"`
+	Parameters map[string]any    `json:"parameters,omitempty"`
+	Messages   []Message         `json:"messages,omitempty"`
 
 	// Deprecated: set the model name with Model instead
 	Name string `json:"name"`
-
-	// Deprecated: set the file content with Modelfile instead
-	Path string `json:"path"`
-
 	// Deprecated: use Quantize instead
 	Quantization string `json:"quantization,omitempty"`
 }
@@ -335,16 +341,18 @@ type ShowRequest struct {
 
 // ShowResponse is the response returned from [Client.Show].
 type ShowResponse struct {
-	License       string         `json:"license,omitempty"`
-	Modelfile     string         `json:"modelfile,omitempty"`
-	Parameters    string         `json:"parameters,omitempty"`
-	Template      string         `json:"template,omitempty"`
-	System        string         `json:"system,omitempty"`
-	Details       ModelDetails   `json:"details,omitempty"`
-	Messages      []Message      `json:"messages,omitempty"`
-	ModelInfo     map[string]any `json:"model_info,omitempty"`
-	ProjectorInfo map[string]any `json:"projector_info,omitempty"`
-	ModifiedAt    time.Time      `json:"modified_at,omitempty"`
+	License       string             `json:"license,omitempty"`
+	Modelfile     string             `json:"modelfile,omitempty"`
+	Parameters    string             `json:"parameters,omitempty"`
+	Template      string             `json:"template,omitempty"`
+	System        string             `json:"system,omitempty"`
+	Details       ModelDetails       `json:"details,omitempty"`
+	Messages      []Message          `json:"messages,omitempty"`
+	ModelInfo     map[string]any     `json:"model_info,omitempty"`
+	ProjectorInfo map[string]any     `json:"projector_info,omitempty"`
+	Tensors       []Tensor           `json:"tensors,omitempty"`
+	Capabilities  []model.Capability `json:"capabilities,omitempty"`
+	ModifiedAt    time.Time          `json:"modified_at,omitempty"`
 }
 
 // CopyRequest is the request passed to [Client.Copy].
@@ -356,9 +364,9 @@ type CopyRequest struct {
 // PullRequest is the request passed to [Client.Pull].
 type PullRequest struct {
 	Model    string `json:"model"`
-	Insecure bool   `json:"insecure,omitempty"`
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Insecure bool   `json:"insecure,omitempty"` // Deprecated: ignored
+	Username string `json:"username"`           // Deprecated: ignored
+	Password string `json:"password"`           // Deprecated: ignored
 	Stream   *bool  `json:"stream,omitempty"`
 
 	// Deprecated: set the model name with Model instead
@@ -460,6 +468,13 @@ type ModelDetails struct {
 	Families          []string `json:"families"`
 	ParameterSize     string   `json:"parameter_size"`
 	QuantizationLevel string   `json:"quantization_level"`
+}
+
+// Tensor describes the metadata for a given tensor.
+type Tensor struct {
+	Name  string   `json:"name"`
+	Type  string   `json:"type"`
+	Shape []uint64 `json:"shape"`
 }
 
 func (m *Metrics) Summary() {
@@ -594,7 +609,6 @@ func DefaultOptions() Options {
 		Temperature:      0.8,
 		TopK:             40,
 		TopP:             0.9,
-		TFSZ:             1.0,
 		TypicalP:         1.0,
 		RepeatLastN:      64,
 		RepeatPenalty:    1.1,
@@ -603,12 +617,11 @@ func DefaultOptions() Options {
 		Mirostat:         0,
 		MirostatTau:      5.0,
 		MirostatEta:      0.1,
-		PenalizeNewline:  true,
 		Seed:             -1,
 
 		Runner: Runner{
 			// options set when the model is loaded
-			NumCtx:    2048,
+			NumCtx:    int(envconfig.ContextLength()),
 			NumBatch:  512,
 			NumGPU:    -1, // -1 here indicates that NumGPU should be set dynamically
 			NumThread: 0,  // let the runtime decide

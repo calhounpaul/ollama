@@ -20,13 +20,13 @@ Make sure that you use the same base model in the `FROM` command as you used to 
 
 Now run `ollama create` from the directory where the `Modelfile` was created:
 
-```bash
+```shell
 ollama create my-model
 ```
 
 Lastly, test the model:
 
-```bash
+```shell
 ollama run my-model
 ```
 
@@ -81,7 +81,7 @@ If you have a GGUF based model or adapter it is possible to import it into Ollam
   * converting a Safetensors adapter with the `convert_lora_to_gguf.py` from Llama.cpp; or
   * downloading a model or adapter from a place such as HuggingFace
 
-To import a GGUF model, create a `Modelfile` containg:
+To import a GGUF model, create a `Modelfile` containing:
 
 ```dockerfile
 FROM /path/to/file.gguf
